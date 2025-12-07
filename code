@@ -1,0 +1,169 @@
+Терминалды ашамыз, жазамыз:
+python manage.py startapp movies
+Қосымша құрылымы пайда болады:
+movies/
+├── __init__.py
+├── admin.py
+├── apps.py
+├── models.py
+├── views.py
+├── tests.py
+└── migrations/
+
+movies/models.py ашып, ішіне жазамыз:
+from django.db import models
+
+class Movie(models.Model):
+    title = models.CharField(max_length=200)
+    year = models.CharField(max_length=4)
+    rating = models.FloatField()
+    genres = models.CharField(max_length=200)
+
+    def __str__(self):
+        return f"{self.title} ({self.year})"
+
+class AnimatedMovie(Movie):
+    studio = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.title} ({self.year}) - {self.studio}"
+
+
+movies/admin.py ашып, жазамыз
+from django.contrib import admin
+from .models import Movie, AnimatedMovie
+
+admin.site.register(Movie)
+admin.site.register(AnimatedMovie)
+
+Формалар (movies/forms.py):
+from django import forms
+from .models import Movie, AnimatedMovie
+
+class MovieForm(forms.ModelForm):
+    class Meta:
+        model = Movie
+        fields = ['title', 'year', 'rating', 'genres']
+
+class AnimatedMovieForm(forms.ModelForm):
+    class Meta:
+        model = AnimatedMovie
+        fields = ['title', 'year', 'rating', 'genres', 'studio']
+
+
+movies/views.py:
+from django.shortcuts import render, redirect
+from .models import Movie, AnimatedMovie
+from .forms import MovieForm, AnimatedMovieForm
+import matplotlib.pyplot as plt
+import numpy as np
+import io
+import urllib, base64
+
+def home(request):
+    movies = Movie.objects.all()
+    return render(request, "movies/home.html", {"movies": movies})
+
+def add_movie(request):
+    if request.method == "POST":
+        if request.POST.get("is_animated") == "on":
+            form = AnimatedMovieForm(request.POST)
+        else:
+            form = MovieForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect("home")
+    else:
+        form = MovieForm()
+    return render(request, "movies/add_movie.html", {"form": form})
+
+def plot_ratings(request):
+    movies = Movie.objects.all()
+    if not movies:
+        return render(request, "movies/plot.html", {"chart": None})
+
+    titles = [movie.title for movie in movies]
+    ratings = [movie.rating for movie in movies]
+
+    plt.figure(figsize=(10,5))
+    plt.bar(titles, ratings, color='skyblue')
+    plt.ylim(0, 10)
+    plt.xlabel("Фильмдер")
+    plt.ylabel("Рейтинг")
+    plt.title("Фильмдердің рейтингі")
+    plt.xticks(rotation=45, ha="right")
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    string = base64.b64encode(buf.read())
+    uri = urllib.parse.quote(string)
+    plt.close()
+    return render(request, "movies/plot.html", {"chart": uri})
+
+movies/urls.py:
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("add/", views.add_movie, name="add_movie"),
+    path("plot/", views.plot_ratings, name="plot_ratings"),
+]
+
+
+movie_project/urls.py:
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include('movies.urls')),
+]
+
+
+movies/templates/movies:
+
+home.html:
+
+<h1>Фильмдер базасы</h1>
+<a href="{% url 'add_movie' %}">Фильм қосу</a> | 
+<a href="{% url 'plot_ratings' %}">Рейтинг графигі</a>
+<ul>
+{% for movie in movies %}
+    <li>{{ movie.title }} ({{ movie.year }}) - Рейтинг: {{ movie.rating }}</li>
+{% endfor %}
+</ul>
+
+
+add_movie.html:
+
+<h1>Фильм қосу</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <label>Мультфильм бе? <input type="checkbox" name="is_animated"></label>
+    <button type="submit">Сақтау</button>
+</form>
+<a href="{% url 'home' %}">Артқа</a>
+
+
+plot.html:
+
+<h1>Рейтинг графигі</h1>
+{% if chart %}
+    <img src="data:image/png;base64,{{ chart }}" alt="Рейтинг графигі">
+{% else %}
+    <p>База бос, график жоқ.</p>
+{% endif %}
+<a href="{% url 'home' %}">Артқа</a>
+
+Дерекқорды дайындау
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
+
+
+Серверді іске қосу:
+python manage.py runserver
+
